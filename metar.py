@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-metar.py – METAR LED Display with High Wind Detection and Blinking for Missing Data
------------------------------------------------------------------------------------
+metar.py – METAR LED Display with High Wind Detection
+-------------------------------------------------------
 This script reads a list of airport codes (ICAO format) from a file named "airports",
 fetches the latest METAR data from AviationWeather, and updates a NeoPixel LED strip.
 It extracts the flight category as well as wind speed and gust values from each METAR.
 If the wind speed or gust exceeds a specified threshold, the LED color is overridden.
-If no METAR data is available for an airport, its LED blinks red for troubleshooting.
+If no METAR data is available for an airport, its LED is set to red.
 The first 9 LEDs are reserved as a fixed legend.
  
 Dependencies:
@@ -53,9 +53,8 @@ LEGEND_COLORS = [
     COLOR_CLEAR       # Legend LED 8: (reserved)
 ]
 
-# Timing intervals
-UPDATE_INTERVAL = 300   # seconds between fetching new METAR data (e.g., 5 minutes)
-BLINK_INTERVAL  = 0.5   # seconds between LED updates (for blinking missing data)
+# Timing interval in seconds between fetching new METAR data (e.g., 5 minutes)
+UPDATE_INTERVAL = 300
 
 # Wind threshold (knots) for high wind override
 HIGH_WIND_THRESHOLD = 15
@@ -183,12 +182,12 @@ def get_color_for_condition(condition):
     else:
         return COLOR_CLEAR
 
-def update_leds(pixels, airports, conditions, blink_state):
+def update_leds(pixels, airports, conditions):
     """
     Update the LED strip:
       - First 9 LEDs: fixed legend.
       - Remaining LEDs: one per airport.
-        If METAR data exists, show its color; otherwise, blink red.
+        If METAR data exists, show its color; otherwise, set to red.
     """
     total_leds = len(pixels)
     # Set fixed legend (LEDs 0-8)
@@ -212,8 +211,8 @@ def update_leds(pixels, airports, conditions, blink_state):
         if condition:
             color = get_color_for_condition(condition)
         else:
-            # No data available: blink red
-            color = (255, 0, 0) if blink_state else COLOR_CLEAR
+            # No data available: set to red permanently.
+            color = (255, 0, 0)
         try:
             pixels[idx] = color
             logging.info("Setting LED %d for %s to %s", idx, airport, color)
@@ -238,9 +237,7 @@ def main():
         pixel_order=LED_ORDER, auto_write=False
     )
 
-    # Set initial conditions and blink state
     conditions = {}
-    blink_state = True
     last_fetch = 0
 
     while True:
@@ -254,12 +251,9 @@ def main():
                 logging.error("No METAR data available; keeping previous data.")
             last_fetch = current_time
 
-        update_leds(pixels, airports, conditions, blink_state)
+        update_leds(pixels, airports, conditions)
         pixels.show()
-
-        # Toggle blink state for missing data
-        blink_state = not blink_state
-        time.sleep(BLINK_INTERVAL)
+        time.sleep(1)  # Update display every 1 second
 
 if __name__ == '__main__':
     try:
