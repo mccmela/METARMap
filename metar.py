@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 """
-metar.py – Streamlined METAR LED Display
------------------------------------------
+metar.py – Streamlined METAR LED Display with Legend
+-----------------------------------------------------
 This script reads a list of airport codes from a file named "airports",
 fetches the latest METAR weather data from aviationweather.gov for these airports,
 parses the flight category, and updates a NeoPixel LED strip accordingly.
 
-Features:
-  - Reads a list of airports from a local file called "airports" (one per line)
-  - Takes a single static snapshot until the next update (no animation)
-  - Logs errors and continues running
-  - Designed for a Raspberry Pi Zero W using GPIO D18
+It reserves the first 8 LEDs as a legend:
+  LED 0: VFR      (Green)
+  LED 1: MVFR     (Blue)
+  LED 2: IFR      (Red)
+  LED 3: LIFR     (Magenta)
+  LED 4: LIGHTNING (White)
+  LED 5: WINDY    (Orange)
+  LED 6: HIGH WINDS (Yellow)
+  LED 7: UNKNOWN  (Gray)
+
+The remaining LEDs display weather for each airport.
 
 Before running, install dependencies:
     sudo pip3 install rpi_ws281x adafruit-circuitpython-neopixel
@@ -27,17 +33,22 @@ import os
 # -------- Configuration --------
 AIRPORT_FILE = "airports"  # File with airport codes (one per line)
 
-# NeoPixel LED configuration; LED_COUNT will be determined by the number of airport codes
+# NeoPixel LED configuration
+# Total LED count = number of airports (from file) + 8 for legend
 LED_PIN = board.D18        # GPIO pin used (D18)
 LED_BRIGHTNESS = 0.5       # Brightness (0.0 to 1.0)
 LED_ORDER = neopixel.GRB
 
 # Color definitions (RGB)
-COLOR_VFR  = (0, 255, 0)    # Green
-COLOR_MVFR = (0, 0, 255)    # Blue
-COLOR_IFR  = (255, 0, 0)    # Red
-COLOR_LIFR = (255, 0, 255)  # Magenta
-COLOR_CLEAR = (0, 0, 0)     # Off
+COLOR_VFR       = (0, 255, 0)       # Green
+COLOR_MVFR      = (0, 0, 255)       # Blue
+COLOR_IFR       = (255, 0, 0)       # Red
+COLOR_LIFR      = (255, 0, 255)     # Magenta
+COLOR_LIGHTNING = (255, 255, 255)   # White
+COLOR_WINDY     = (255, 165, 0)     # Orange
+COLOR_HIGH_WINDS= (255, 255, 0)     # Yellow
+COLOR_UNKNOWN   = (128, 128, 128)   # Gray
+COLOR_CLEAR     = (0, 0, 0)         # Off
 
 # Update interval (in seconds) between METAR data refreshes (e.g., 300 seconds = 5 minutes)
 UPDATE_INTERVAL = 300
@@ -113,6 +124,7 @@ def parse_metar(content):
         if station_elem is None:
             logging.warning("Missing station id for a METAR entry, skipping.")
             continue
+        # Check if flight category text is available
         if flight_elem is None or flight_elem.text is None:
             logging.warning("Missing flight category for %s, skipping.", station_elem.text.strip())
             continue
@@ -122,7 +134,6 @@ def parse_metar(content):
         conditions[station_id] = {"flightCategory": flight_category}
         logging.info("Parsed %s: %s", station_id, flight_category)
     return conditions
-
 
 def get_color_for_category(category):
     """Return the LED color based on the flight category."""
@@ -138,15 +149,39 @@ def get_color_for_category(category):
         return COLOR_CLEAR
 
 def update_leds(pixels, airports, conditions):
-    """Update each LED based on the weather conditions for its corresponding airport."""
-    for i, airport in enumerate(airports):
+    """Update the LED strip.
+    
+    The first 8 LEDs are reserved for the legend. The remaining LEDs correspond
+    to the airports read from the file.
+    """
+    # Set the fixed legend on LEDs 0 to 7.
+    legend_colors = [
+         COLOR_VFR,       # Legend LED 0: VFR
+         COLOR_MVFR,      # Legend LED 1: MVFR
+         COLOR_IFR,       # Legend LED 2: IFR
+         COLOR_LIFR,      # Legend LED 3: LIFR
+         COLOR_LIGHTNING, # Legend LED 4: LIGHTNING
+         COLOR_WINDY,     # Legend LED 5: WINDY
+         COLOR_HIGH_WINDS,# Legend LED 6: HIGH WINDS
+         COLOR_UNKNOWN    # Legend LED 7: UNKNOWN
+    ]
+    for i in range(8):
+        try:
+            pixels[i] = legend_colors[i]
+            logging.info("Setting legend LED %d to %s", i, legend_colors[i])
+        except Exception as e:
+            logging.error("Error setting legend LED %d: %s", i, e)
+
+    # Update the airport LEDs starting from index 8.
+    offset = 8
+    for j, airport in enumerate(airports):
         condition = conditions.get(airport)
         color = get_color_for_category(condition["flightCategory"]) if condition else COLOR_CLEAR
         try:
-            pixels[i] = color
-            logging.info("Setting LED %d for %s to %s", i, airport, color)
+            pixels[offset + j] = color
+            logging.info("Setting LED %d for %s to %s", offset + j, airport, color)
         except Exception as e:
-            logging.error("Error setting LED %d: %s", i, e)
+            logging.error("Error setting LED %d: %s", offset + j, e)
 
 def main():
     logging.info("Starting METAR LED Display")
@@ -157,8 +192,8 @@ def main():
         logging.error("No airports loaded. Exiting.")
         return
 
-    # Set the number of LEDs equal to the number of airports
-    LED_COUNT = len(airports)
+    # Total LED count = 8 (legend) + number of airports
+    LED_COUNT = len(airports) + 8
 
     # Initialize the NeoPixel LED strip
     pixels = neopixel.NeoPixel(
