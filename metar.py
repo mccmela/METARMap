@@ -110,8 +110,11 @@ def parse_metar(content):
     for metar in root.iter('METAR'):
         station_elem = metar.find('station_id')
         flight_elem = metar.find('flight_category')
-        if station_elem is None or flight_elem is None:
-            logging.warning("Missing data for a METAR entry, skipping.")
+        if station_elem is None:
+            logging.warning("Missing station id for a METAR entry, skipping.")
+            continue
+        if flight_elem is None or flight_elem.text is None:
+            logging.warning("Missing flight category for %s, skipping.", station_elem.text.strip())
             continue
 
         station_id = station_elem.text.strip()
@@ -119,6 +122,7 @@ def parse_metar(content):
         conditions[station_id] = {"flightCategory": flight_category}
         logging.info("Parsed %s: %s", station_id, flight_category)
     return conditions
+
 
 def get_color_for_category(category):
     """Return the LED color based on the flight category."""
