@@ -7,7 +7,7 @@ fetches the latest METAR data from AviationWeather, and updates a NeoPixel LED s
 It extracts the flight category as well as wind speed and gust values from each METAR.
 If the wind speed or gust exceeds a specified threshold, the LED color is overridden.
 If no METAR data is available for an airport, its LED blinks red for troubleshooting.
-The first 8 LEDs are reserved as a fixed legend.
+The first 9 LEDs are reserved as a fixed legend.
  
 Dependencies:
     sudo pip3 install --break-system-packages rpi_ws281x adafruit-circuitpython-neopixel
@@ -25,7 +25,7 @@ import os
 AIRPORT_FILE = "airports"  # File with ICAO airport codes (one per line)
 
 # NeoPixel configuration:
-# Total LED count = number of airports + 8 (for legend)
+# Total LED count = number of airports + 9 (for legend)
 LED_PIN = board.D18          # GPIO pin (D18)
 LED_BRIGHTNESS = 0.5         # Brightness (0.0 to 1.0)
 LED_ORDER = neopixel.GRB
@@ -38,20 +38,20 @@ COLOR_LIFR      = (255, 0, 255)     # Magenta
 COLOR_CLEAR     = (0, 0, 0)         # Off
 
 # High wind override color
-COLOR_HIGH_WIND = (255, 255, 0)   # Yellow
+COLOR_HIGH_WIND = (255, 255, 0)     # Yellow
 
 # Legend colors (positions 0-8)
 LEGEND_COLORS = [
-    (255, 255, 255), # Legend LED 1: LIGHTNING (example)
-    (255, 255, 0),   # Legend LED 2: HIGH WINDS (Yellow)
-    COLOR_MVFR,      # Legend LED 3: MVFR
-    COLOR_LIFR,      # Legend LED 4: LIFR
-    COLOR_IFR,       # Legend LED 5: IFR
-    COLOR_VFR,       # Legend LED 6: VFR
-    COLOR_CLEAR,     # Legend LED 7: Clear (no data)
-    COLOR_CLEAR,
-    COLOR_CLEAR
-]            
+    (255, 255, 255),  # Legend LED 0: LIGHTNING (example)
+    (255, 255, 0),    # Legend LED 1: HIGH WINDS (Yellow)
+    COLOR_MVFR,       # Legend LED 2: MVFR
+    COLOR_LIFR,       # Legend LED 3: LIFR
+    COLOR_IFR,        # Legend LED 4: IFR
+    COLOR_VFR,        # Legend LED 5: VFR
+    COLOR_CLEAR,      # Legend LED 6: Clear (no data)
+    COLOR_CLEAR,      # Legend LED 7: (reserved)
+    COLOR_CLEAR       # Legend LED 8: (reserved)
+]
 
 # Timing intervals
 UPDATE_INTERVAL = 300   # seconds between fetching new METAR data (e.g., 5 minutes)
@@ -186,12 +186,16 @@ def get_color_for_condition(condition):
 def update_leds(pixels, airports, conditions, blink_state):
     """
     Update the LED strip:
-      - First 8 LEDs: fixed legend.
+      - First 9 LEDs: fixed legend.
       - Remaining LEDs: one per airport.
         If METAR data exists, show its color; otherwise, blink red.
     """
-    # Set fixed legend (LEDs 0-7)
-    for i in range(8):
+    total_leds = len(pixels)
+    # Set fixed legend (LEDs 0-8)
+    for i in range(9):
+        if i >= total_leds:
+            logging.error("Legend LED index %d is out-of-range (total LEDs: %d).", i, total_leds)
+            continue
         try:
             pixels[i] = LEGEND_COLORS[i]
             logging.info("Setting legend LED %d to %s", i, LEGEND_COLORS[i])
@@ -200,6 +204,10 @@ def update_leds(pixels, airports, conditions, blink_state):
 
     offset = 9
     for j, airport in enumerate(airports):
+        idx = offset + j
+        if idx >= total_leds:
+            logging.error("Calculated LED index %d for airport %s is out-of-range (total LEDs: %d).", idx, airport, total_leds)
+            continue
         condition = conditions.get(airport)
         if condition:
             color = get_color_for_condition(condition)
@@ -207,10 +215,10 @@ def update_leds(pixels, airports, conditions, blink_state):
             # No data available: blink red
             color = (255, 0, 0) if blink_state else COLOR_CLEAR
         try:
-            pixels[offset + j] = color
-            logging.info("Setting LED %d for %s to %s", offset + j, airport, color)
+            pixels[idx] = color
+            logging.info("Setting LED %d for %s to %s", idx, airport, color)
         except Exception as e:
-            logging.error("Error setting LED %d: %s", offset + j, e)
+            logging.error("Error setting LED %d: %s", idx, e)
 
 def main():
     logging.info("Starting METAR LED Display")
@@ -221,8 +229,8 @@ def main():
         logging.error("No airports loaded. Exiting.")
         return
 
-    # Total LED count = 8 (legend) + number of airports
-    LED_COUNT = len(airports) + 8
+    # Total LED count = 9 (legend) + number of airports
+    LED_COUNT = len(airports) + 9
 
     # Initialize the NeoPixel LED strip
     pixels = neopixel.NeoPixel(
