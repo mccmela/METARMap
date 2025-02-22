@@ -38,19 +38,20 @@ COLOR_LIFR      = (255, 0, 255)     # Magenta
 COLOR_CLEAR     = (0, 0, 0)         # Off
 
 # High wind override color
-COLOR_HIGH_WIND = (255, 255, 255)   # White
+COLOR_HIGH_WIND = (255, 255, 0)   # Yellow
 
-# Legend colors (positions 0-7)
+# Legend colors (positions 0-8)
 LEGEND_COLORS = [
-    COLOR_VFR,       # Legend LED 0: VFR
-    COLOR_MVFR,      # Legend LED 1: MVFR
-    COLOR_IFR,       # Legend LED 2: IFR
-    COLOR_LIFR,      # Legend LED 3: LIFR
-    (255, 255, 255), # Legend LED 4: LIGHTNING (example)
-    (255, 165, 0),   # Legend LED 5: WINDY (Orange)
-    (255, 255, 0),   # Legend LED 6: HIGH WINDS (Yellow)
-    (128, 128, 128)  # Legend LED 7: UNKNOWN
-]
+    (255, 255, 255), # Legend LED 1: LIGHTNING (example)
+    (255, 255, 0),   # Legend LED 2: HIGH WINDS (Yellow)
+    COLOR_MVFR,      # Legend LED 3: MVFR
+    COLOR_LIFR,      # Legend LED 4: LIFR
+    COLOR_IFR,       # Legend LED 5: IFR
+    COLOR_VFR,       # Legend LED 6: VFR
+    COLOR_CLEAR,     # Legend LED 7: Clear (no data)
+    COLOR_CLEAR,
+    COLOR_CLEAR
+]            
 
 # Timing intervals
 UPDATE_INTERVAL = 300   # seconds between fetching new METAR data (e.g., 5 minutes)
@@ -197,7 +198,7 @@ def update_leds(pixels, airports, conditions, blink_state):
         except Exception as e:
             logging.error("Error setting legend LED %d: %s", i, e)
 
-    offset = 8
+    offset = 9
     for j, airport in enumerate(airports):
         condition = conditions.get(airport)
         if condition:
