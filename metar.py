@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-metar.py – METAR LED Display with High Wind Detection
--------------------------------------------------------
+metar.py – METAR LED Display with High Wind and Lightning Detection
+--------------------------------------------------------------------
 This script reads a list of airport codes (ICAO format) from a file named "airports",
 fetches the latest METAR data from AviationWeather, and updates a NeoPixel LED strip.
-It extracts the flight category as well as wind speed and gust values from each METAR.
+It extracts the flight category, wind speed/gust values, and lightning conditions from each METAR.
 If the wind speed or gust exceeds a specified threshold, the LED color is overridden.
-If no METAR data is available for an airport, its LED is set to red.
+If lightning is detected, the LED color is overridden with the lightning color.
+If no METAR data is available for an airport, its LED is set to off.
 The first 9 LEDs are reserved as a fixed legend.
  
 Dependencies:
@@ -40,10 +41,13 @@ COLOR_CLEAR     = (0, 0, 0)         # Off
 # High wind override color
 COLOR_HIGH_WIND = (255, 255, 0)     # Yellow
 
+# Lightning override color
+COLOR_LIGHTNING = (255, 255, 255)   # White
+
 # Legend colors (positions 0-8)
 LEGEND_COLORS = [
-    (255, 255, 255),  # Legend LED 0: LIGHTNING (example)
-    (255, 255, 0),    # Legend LED 1: HIGH WINDS (Yellow)
+    COLOR_LIGHTNING,  # Legend LED 0: LIGHTNING
+    COLOR_HIGH_WIND,  # Legend LED 1: HIGH WINDS
     COLOR_MVFR,       # Legend LED 2: MVFR
     COLOR_LIFR,       # Legend LED 3: LIFR
     COLOR_IFR,        # Legend LED 4: IFR
@@ -116,7 +120,7 @@ def fetch_metar_data(airports):
 
 def parse_metar(content):
     """Parse METAR XML content and return a dictionary keyed by airport code.
-       Extract flight category, wind speed (kt) and wind gust (kt)."""
+       Extract flight category, wind speed (kt), wind gust (kt), and lightning status."""
     conditions = {}
     try:
         root = ET.fromstring(content)
@@ -153,24 +157,43 @@ def parse_metar(content):
             except ValueError:
                 wind_gust = 0
 
+        # Determine lightning condition.
+        lightning = False
+        raw_text_elem = metar.find('raw_text')
+        if raw_text_elem is not None and raw_text_elem.text is not None:
+            raw_text = raw_text_elem.text
+            # Check if the raw text contains lightning indicators, but not TSNO (which indicates no lightning)
+            if ("LTG" in raw_text or "TS" in raw_text) and "TSNO" not in raw_text:
+                lightning = True
+
         conditions[station_id] = {
             "flightCategory": flight_category,
             "windSpeed": wind_speed,
-            "windGust": wind_gust
+            "windGust": wind_gust,
+            "lightning": lightning
         }
-        logging.info("Parsed %s: %s, wind %d kt, gust %d kt", station_id, flight_category, wind_speed, wind_gust)
+        logging.info("Parsed %s: %s, wind %d kt, gust %d kt, lightning %s",
+                     station_id, flight_category, wind_speed, wind_gust, lightning)
     return conditions
 
 def get_color_for_condition(condition):
     """
     Return an LED color based on flight category.
+    Lightning takes precedence over other conditions.
     If wind speed or gust exceeds the threshold, override with high wind color.
     """
-    category = condition.get("flightCategory", "")
+    # Check for lightning first
+    if condition.get("lightning", False):
+        return COLOR_LIGHTNING
+
+    # Check wind condition
     wind_speed = condition.get("windSpeed", 0)
     wind_gust = condition.get("windGust", 0)
     if wind_speed >= HIGH_WIND_THRESHOLD or wind_gust >= HIGH_WIND_THRESHOLD:
         return COLOR_HIGH_WIND
+
+    # Otherwise, choose based on flight category
+    category = condition.get("flightCategory", "")
     if category == "VFR":
         return COLOR_VFR
     elif category == "MVFR":
@@ -187,7 +210,7 @@ def update_leds(pixels, airports, conditions):
     Update the LED strip:
       - First 9 LEDs: fixed legend.
       - Remaining LEDs: one per airport.
-        If METAR data exists, show its color; otherwise, set to red.
+        If METAR data exists, show its color; otherwise, set to off.
     """
     total_leds = len(pixels)
     # Set fixed legend (LEDs 0-8)
@@ -205,14 +228,15 @@ def update_leds(pixels, airports, conditions):
     for j, airport in enumerate(airports):
         idx = offset + j
         if idx >= total_leds:
-            logging.error("Calculated LED index %d for airport %s is out-of-range (total LEDs: %d).", idx, airport, total_leds)
+            logging.error("Calculated LED index %d for airport %s is out-of-range (total LEDs: %d).",
+                          idx, airport, total_leds)
             continue
         condition = conditions.get(airport)
         if condition:
             color = get_color_for_condition(condition)
         else:
-            # No data available: set to red permanently.
-            color = (255, 0, 0)
+            # No data available: set LED off
+            color = COLOR_CLEAR
         try:
             pixels[idx] = color
             logging.info("Setting LED %d for %s to %s", idx, airport, color)
