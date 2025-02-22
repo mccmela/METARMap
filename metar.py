@@ -53,12 +53,12 @@ LEGEND_COLORS = [
     COLOR_IFR,        # Legend LED 4: IFR
     COLOR_VFR,        # Legend LED 5: VFR
     COLOR_CLEAR,      # Legend LED 6: Clear (no data)
-    COLOR_CLEAR,      # Legend LED 7: (reserved)
-    COLOR_CLEAR       # Legend LED 8: (reserved)
+    COLOR_CLEAR,      # Legend LED 7: Reserved
+    COLOR_CLEAR       # Legend LED 8: Reserved
 ]
 
-# Timing interval in seconds between fetching new METAR data (e.g., 5 minutes)
-UPDATE_INTERVAL = 300
+# Timing intervals
+UPDATE_INTERVAL = 300   # seconds between fetching new METAR data (e.g., 5 minutes)
 
 # Wind threshold (knots) for high wind override
 HIGH_WIND_THRESHOLD = 15
@@ -162,7 +162,7 @@ def parse_metar(content):
         raw_text_elem = metar.find('raw_text')
         if raw_text_elem is not None and raw_text_elem.text is not None:
             raw_text = raw_text_elem.text
-            # Check if the raw text contains lightning indicators, but not TSNO (which indicates no lightning)
+            # Check for lightning indicators (e.g., "LTG" or "TS") unless "TSNO" is present.
             if ("LTG" in raw_text or "TS" in raw_text) and "TSNO" not in raw_text:
                 lightning = True
 
@@ -192,7 +192,7 @@ def get_color_for_condition(condition):
     if wind_speed >= HIGH_WIND_THRESHOLD or wind_gust >= HIGH_WIND_THRESHOLD:
         return COLOR_HIGH_WIND
 
-    # Otherwise, choose based on flight category
+    # Otherwise choose based on flight category
     category = condition.get("flightCategory", "")
     if category == "VFR":
         return COLOR_VFR
@@ -235,7 +235,7 @@ def update_leds(pixels, airports, conditions):
         if condition:
             color = get_color_for_condition(condition)
         else:
-            # No data available: set LED off
+            # No data available: set LED off.
             color = COLOR_CLEAR
         try:
             pixels[idx] = color
@@ -262,7 +262,18 @@ def main():
     )
 
     conditions = {}
-    last_fetch = 0
+    # Try to fetch initial METAR data until successful
+    while True:
+        content = fetch_metar_data(airports)
+        if content:
+            conditions = parse_metar(content)
+            break
+        else:
+            logging.error("Initial METAR data fetch failed; retrying in 10 seconds.")
+            time.sleep(10)
+
+    # Record the time of the last successful fetch
+    last_fetch = time.time()
 
     while True:
         current_time = time.time()
