@@ -28,7 +28,7 @@ AIRPORT_FILE = "airports"  # File with ICAO airport codes (one per line)
 # NeoPixel configuration:
 # Total LED count = number of airports + 9 (for legend)
 LED_PIN = board.D18          # GPIO pin (D18)
-LED_BRIGHTNESS = 0.5         # Brightness (0.0 to 1.0)
+LED_BRIGHTNESS = 0.1         # Brightness (0.0 to 1.0)
 LED_ORDER = neopixel.GRB
 
 # Color definitions (RGB)
